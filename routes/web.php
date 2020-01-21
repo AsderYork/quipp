@@ -17,4 +17,5 @@ $router->get('/', function () use ($router) {
 
 
 $router->post('/quip/auth', 'QuipController@auth');
+$router->post('/quip/new', 'QuipController@new_game');
 
