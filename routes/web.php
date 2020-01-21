@@ -16,6 +16,12 @@ $router->get('/', function () use ($router) {
 });
 
 
+$router->get('/quip', 'QuipController@index');
+
+
 $router->post('/quip/auth', 'QuipController@auth');
 $router->post('/quip/new', 'QuipController@new_game');
+$router->post('/quip/lobby', 'QuipController@lobby_status');
+
+
 

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+<table id="auth-menu">
+    <tr>
+        <td>
+            Имя
+        </td>
+        <td>
+            <input type="text" id="usernameinput">
+        </td>
+    </tr>
+    <tr>
+        <td rowspan="99">
+            <button id="usernameinputsubmit" onclick="submit_username($('#usernameinput').val());">Отправить</button>
+        </td>
+    </tr>
+</table>
+
+<div id="wellcome-screen" hidden>
+
+    <h1>Wellcomen, <span id="username-show"></span></h1>
+
+    <table>
+        <tr>
+            <td>
+                <button onclick="start_new_game();">Новая игра</button>
+            </td>
+            <td>
+                <button>Подключиться</button><input type="text" id="roomname_input">
+            </td>
+        </tr>
+    </table>
+
+</div>
+
+<div id="waiting" hidden>
+    <h1>Wating...</h1>
+</div>
+
+<div id="lobby" hidden>
+
+    <h1 id="lobby-name"></h1>
+
+    <button onclick="lobby_ready()" id="lobby-ready">Готов</button>
+    <button onclick="lobby_unready()" hidden id="lobby-unready">Не готов</button>
+
+    <table id="lobby-players">
+        <tr>
+            <th>Игроки</th>
+        </tr>
+    </table>
+
+</div>
+
+
+
+
+</body>
+</html>
+
+<script>
+
+    var key = null;
+    var username = null;
+    var userid = null;
+    var currgamename = null;
+    var currgameid = null;
+
+    function auth_done(data) {
+
+        $('#username-show').text(username);
+
+        key = data.key;
+        userid = data.id;
+
+        $('#waiting').hide();
+        $('#auth-menu').hide();
+        $('#wellcome-screen').show();
+
+    }
+
+    function enter_lobby(data) {
+
+        currgamename = data.name;
+        currgameid = data.id;
+
+        $('#lobby-name').text(data.name);
+
+
+        $('#wellcome-screen').hide();
+        $('#waiting').hide();
+        $('#lobby').show();
+
+        setInterval(update_lobby, 1000);
+
+    }
+
+    function update_lobby() {
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/lobby',
+            dataType: 'json',
+            data: {key:key, game:currgameid},
+            success: function(data){
+                $("#lobby-players").find("tr:gt(0)").remove();
+                console.log(data);
+
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+    }
+
+
+    function submit_username(usrname) {
+
+        username = usrname;
+
+        $('#waiting').show();
+        $('#auth-menu').hide();
+
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/auth',
+            dataType: 'json',
+            data: {name:username},
+            success: function(data){
+                auth_done(data);
+
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+
+    }
+
+    function start_new_game() {
+
+        $('#wellcome-screen').hide();
+        $('#waiting').show();
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/new',
+            dataType: 'json',
+            data: {key:key, game:currgameid},
+            success: function(data){
+                enter_lobby(data);
+
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+    }
+
+
+</script>
