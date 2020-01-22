@@ -33,7 +33,7 @@
                 <button onclick="start_new_game();">Новая игра</button>
             </td>
             <td>
-                <button>Подключиться</button><input type="text" id="roomname_input">
+                <button onclick="join_game($('#roomname_input').val())">Подключиться</button><input type="text" id="roomname_input">
             </td>
         </tr>
     </table>
@@ -48,14 +48,26 @@
 
     <h1 id="lobby-name"></h1>
 
-    <button onclick="lobby_ready()" id="lobby-ready">Готов</button>
-    <button onclick="lobby_unready()" hidden id="lobby-unready">Не готов</button>
+    <div id="ready-buttons">
+        <button onclick="lobby_set_ready(1)" id="lobby-ready">Готов</button>
+        <button onclick="lobby_set_ready(0)" hidden id="lobby-unready">Не готов</button>
+    </div>
 
     <table id="lobby-players">
         <tr>
             <th>Игроки</th>
         </tr>
     </table>
+
+</div>
+
+<div id="question" hidden>
+    <h1>Игра началась!</h1>
+    <h2>Придумайте забавный ответ на вопрос</h2>
+    <h3 id="question-view"></h3>
+
+    <input type="text" id="answer-inputtext">
+    <button onclick="send_answer($('#answer-inputtext').val())">Отправить</button>
 
 </div>
 
@@ -98,11 +110,53 @@
         $('#waiting').hide();
         $('#lobby').show();
 
-        setInterval(update_lobby, 1000);
+        start_lobby_update();
+        setInterval(start_lobby_update, 1000);
 
     }
 
-    function update_lobby() {
+    function update_lobby_data(data) {
+        $("#lobby-players").find("tr:gt(0)").remove();
+
+        if (data.game.started !== null) {
+
+            $('#ready-buttons').hide();
+            $('#question').show();
+
+
+            $('#question-view').text(data.question.question);
+
+        } else {
+            $('#question').hide();
+        }
+
+        $('#lobby').show();
+
+        data.players.forEach(function (x) {
+
+            if(x.ready == 'not ready') {
+                if (x.userid === userid) {
+                    $('#lobby-ready').show();
+                    $('#lobby-unready').hide();
+                }
+                $("#lobby-players").append(`<tr><td style="color: red">${x.username}</td></tr>`);
+            } else if(!x.answer_ready) {
+                $("#lobby-players").append(`<tr><td style="color: #fff81c">${x.username}</td></tr>`);
+            } else {
+                $("#lobby-players").append(`<tr><td style="color: green">${x.username}</td></tr>`);
+
+                if (x.userid === userid) {
+                    $('#lobby-ready').hide();
+                    $('#lobby-unready').show();
+                }
+
+            }
+        });
+
+
+    }
+
+    function start_lobby_update() {
 
         $.ajax({
             type: 'POST',
@@ -110,9 +164,7 @@
             dataType: 'json',
             data: {key:key, game:currgameid},
             success: function(data){
-                $("#lobby-players").find("tr:gt(0)").remove();
-                console.log(data);
-
+                update_lobby_data(data);
             },
             fail: function(data) {
                 console.log('error');
@@ -158,7 +210,7 @@
             type: 'POST',
             url: '/quip/new',
             dataType: 'json',
-            data: {key:key, game:currgameid},
+            data: {key:key},
             success: function(data){
                 enter_lobby(data);
 
@@ -168,6 +220,67 @@
                 console.log(data);
             }
         });
+
+    }
+
+
+    function join_game(gamename) {
+
+        $('#wellcome-screen').hide();
+        $('#waiting').show();
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/join',
+            dataType: 'json',
+            data: {key:key, game:gamename},
+            success: function(data){
+                enter_lobby(data);
+
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+    }
+
+
+    function lobby_set_ready(status) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/ready',
+            dataType: 'json',
+            data:  {key:key, game:currgameid, ready:status},
+            success: function(data){
+                update_lobby_data(data);
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+    }
+
+    function send_answer(answer) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/answer',
+            dataType: 'json',
+            data:  {key:key, game:currgameid, answer:answer},
+            success: function(data){
+                update_lobby_data(data);
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
 
     }
 

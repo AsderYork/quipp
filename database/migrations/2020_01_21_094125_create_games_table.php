@@ -17,6 +17,8 @@ class CreateGamesTable extends Migration
             $table->increments('id');
             $table->string('name');
             $table->integer('creator')->unsigned();
+            $table->dateTime('started')->nullable();
+            $table->integer('round')->default(0);
             $table->softDeletes();
             $table->timestamps();
             $table->foreign('creator')->references('id')->on('users');

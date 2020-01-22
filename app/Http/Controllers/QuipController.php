@@ -82,19 +82,100 @@ class QuipController extends Controller
     }
 
     private function add_new_player($gameid, $userid) {
-        $gameid = DB::table('games_users')->insert(
-            [
-                'game' => $gameid,
-                'user' => $userid
-            ]);
+
+
+        $existing_player = DB::table('games_users')
+            ->where('user', $userid)
+            ->where('game', $gameid)
+            ->where('deleted_at', null)
+            ->value('id');
+
+        if($existing_player == null) {
+            $gameid = DB::table('games_users')->insert(
+                [
+                    'game' => $gameid,
+                    'user' => $userid
+                ]);
+        }
     }
+
+    private function setup_quipp_round(&$game, $players) {
+
+        $game->round++;
+        $round = $game->round;
+        $round++;
+
+        $questions_ids = db::table('questions')->pluck('id')->toArray();
+
+        $question = $questions_ids[array_rand($questions_ids)];
+
+        $insert = [];
+        foreach ($players as $player) {
+            $insert[] = [
+                'user' => $player['userid'],
+                'game' => $game->id,
+                'round' => $round,
+                'question' => $question,
+            ];
+        }
+        db::table('answers')->insert($insert);
+
+        db::table('games')->where('id', $game->id)->update(['round' => $round]);
+
+
+
+
+
+    }
+
+    private function get_players_question($gameid, $round, $userid) {
+
+        return db::table('answers')
+            ->leftJoin('questions', 'questions.id', '=', 'answers.question')
+            ->where('user', $userid)
+            ->where('game', $gameid)
+            ->where('round', $round)
+            ->select(['questions.question', 'answers.answer'])
+            ->first();
+
+    }
+
+    private function set_player_answer($gameid, $round, $userid, $answer) {
+
+        db::table('answers')
+            ->where('user', $userid)
+            ->where('game', $gameid)
+            ->where('round', $round)
+            ->update(['answer' => $answer]);
+
+    }
+
+
 
     private function set_player_ready($gameid, $userid, $status) {
 
         db::table('games_users')
             ->where('game', $gameid)
             ->where('user', $userid)
+            ->where('deleted_at', null)
             ->update(['ready_status' => $status ? 'ready' : 'not ready']);
+
+        $not_readies = db::table('games_users')
+            ->where('game',  (int)$gameid)
+            ->where('deleted_at', null)
+            ->where('ready_status','=', 'not ready')
+            ->count();
+
+        if($not_readies == 0) {
+            db::table('games')
+                ->where('id', $gameid)
+                ->where('deleted_at', null)
+                ->update(['started' => db::raw('NOW()')]);
+            return true;
+        }
+
+        return false;
+
 
     }
 
@@ -152,23 +233,112 @@ class QuipController extends Controller
 
     }
 
-    public function get_game_players($game) {
+    public function join(Request $request) {
 
-        //@TODO Доделать
-        $game_data = db::table('games_users')
-            ->where('game', $game)
-            ->where('games_users.deleated_at', null)
-            ->get();
+        $key = $request->input('key');
 
-        $result = [];
+        $user = DB::table('users')
+            ->where('key', $key)
+            ->first();
+
+        if($user == null) {
+            $result = ['err' => 'unauthrized'];
+            return json_encode($result);
+        }
+
+        $game = db::table('games')
+            ->where('name', $request->input('game'))
+            ->where('deleted_at', null)
+            ->first();
+
+        if($game == null) {
+            $result = ['err' => 'no such game'];
+            return json_encode($result);
+        }
 
 
+        $this->add_new_player($game->id, $user->id);
 
+        return json_encode(['name' => $game->name, 'id' => $game->id]);
 
     }
 
 
+    public function get_game_players($game) {
+
+        $game_data = db::table('games_users')
+            ->leftJoin('users', 'users.id', '=', 'games_users.user')
+            ->leftJoin('games', 'games.id', '=', 'games_users.game')
+            ->leftJoin('answers', function ($join) {
+                $join->on('answers.game', '=', 'games_users.game')
+                    ->on('answers.user', '=', 'users.id')
+                    ->on('answers.round', '=', 'games.round');
+            })
+            ->where('games_users.game', $game)
+            ->where('games_users.deleted_at', null)
+            ->select([
+                'games_users.ready_status',
+                'games_users.user',
+                'users.name',
+                'answers.answer'
+            ])
+            ->get();
+
+        $result = [];
+        foreach ($game_data as $game_datum) {
+            $result[] = [
+                'ready' => $game_datum->ready_status,
+                'userid' => $game_datum->user,
+                'username' => $game_datum->name,
+                'answer_ready' => $game_datum->answer != null,
+            ];
+
+        }
+
+        return $result;
+    }
+
+
     public function lobby_status(Request $request) {
+
+        $authorization = $this->authorise_user($request);
+
+
+        if(empty($authorization['user'])) {
+            return ['err' => 'unauthorized'];
+        } elseif(!array_key_exists('in_game', $authorization) || $authorization['in_game'] == 0) {
+            return ['err' => 'not part of the game'];
+        }
+
+        $gameid = $request->input('game');
+
+        $gamedata = $this->get_game_players($gameid);
+
+        $game = db::table('games')
+            ->where('id', $gameid)
+            ->where('deleted_at', null)
+            ->first();
+
+        $result = ['players' => $gamedata, 'game' => $game];
+
+        if($game->started != null) {
+            $result['question'] = $this->get_players_question($gameid, $game->round, $authorization['user']->id);
+        }
+
+
+        return json_encode($result);
+
+    }
+
+    private function get_game($gameid) {
+
+        return db::table('games')
+            ->where('id', $gameid)
+            ->first();
+
+    }
+
+    public function ready(Request $request) {
 
         $authorization = $this->authorise_user($request);
 
@@ -179,8 +349,48 @@ class QuipController extends Controller
         }
 
 
+        $gameid = $request->input('game');
+        $userid = $authorization['user']->id;
+        $status = (bool)$request->input('ready');
+
+        if($this->get_game($gameid)->started != null) {
+            return json_encode(['err' => 'game allready started']);
+        }
 
 
+        $started = $this->set_player_ready($gameid, $userid, $status);
+
+        $gamedata = $this->get_game_players($gameid);
+
+        $game = db::table('games')
+            ->where('id', $gameid)
+            ->where('deleted_at', null)
+            ->first();
+
+        if($started) {
+            $this->setup_quipp_round($game, $gamedata);
+        }
+
+        return json_encode(['players' => $gamedata, 'game' => $game]);
+
+    }
+
+    public function answer(Request $request) {
+
+        $authorization = $this->authorise_user($request);
+
+        if(empty($authorization['user'])) {
+            return ['err' => 'unauthorized'];
+        } elseif($authorization['in_game'] == 0) {
+            return ['err' => 'not part of the game'];
+        }
+
+        $gameid = $request->input('game');
+        $userid = $authorization['user']->id;
+
+        $game = $this->get_game($gameid);
+
+        $this->set_player_answer($gameid, $game->round, $userid, $request->input('answer'));
 
 
 

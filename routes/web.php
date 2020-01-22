@@ -21,7 +21,10 @@ $router->get('/quip', 'QuipController@index');
 
 $router->post('/quip/auth', 'QuipController@auth');
 $router->post('/quip/new', 'QuipController@new_game');
+$router->post('/quip/join', 'QuipController@join');
 $router->post('/quip/lobby', 'QuipController@lobby_status');
+$router->post('/quip/ready', 'QuipController@ready');
+$router->post('/quip/answer', 'QuipController@answer');
 
 
 
