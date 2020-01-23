@@ -16,7 +16,7 @@ $router->get('/', function () use ($router) {
 });
 
 
-$router->get('/quip', 'QuipController@index');
+$router->get('/quip/{name}', 'QuipController@index');
 
 
 $router->post('/quip/auth', 'QuipController@auth');
@@ -25,6 +25,7 @@ $router->post('/quip/join', 'QuipController@join');
 $router->post('/quip/lobby', 'QuipController@lobby_status');
 $router->post('/quip/ready', 'QuipController@ready');
 $router->post('/quip/answer', 'QuipController@answer');
+$router->post('/quip/vote', 'QuipController@vote');
 
 
 

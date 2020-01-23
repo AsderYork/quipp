@@ -63,11 +63,28 @@
 
 <div id="question" hidden>
     <h1>Игра началась!</h1>
-    <h2>Придумайте забавный ответ на вопрос</h2>
+
+    <div id="objective-active" hidden>
+        <h2>Придумайте забавный ответ на вопрос</h2>
+    </div>
+    <div id="objective-wait" hidden>
+        <h2>Ожидание других игроков</h2>
+    </div>
+
     <h3 id="question-view"></h3>
 
-    <input type="text" id="answer-inputtext">
-    <button onclick="send_answer($('#answer-inputtext').val())">Отправить</button>
+    <div id="answer-box">
+        <input type="text" id="answer-inputtext">
+        <button onclick="send_answer($('#answer-inputtext').val())">Отправить</button>
+    </div>
+
+    <div id="voting-prompt" hidden>
+        <table id="voting-table">
+        </table>
+
+        <button onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
+
+    </div>
 
 </div>
 
@@ -118,37 +135,80 @@
     function update_lobby_data(data) {
         $("#lobby-players").find("tr:gt(0)").remove();
 
-        if (data.game.started !== null) {
+        //'started', 'answers', 'voting', 'showing_results', 'end'
+        switch (data.game.status) {
+            case 'started': {
+                $('#ready-buttons').show();
+                $('#question').hide();
+                $('#voting-prompt').hide();
+                $('#voting-table').empty();
+                break;
+            }
+            case 'answers': {
+                $('#ready-buttons').hide();
+                $('#question').show();
+                $('#voting-prompt').hide();
+                $('#question-view').text(data.question.question);
+                $('#voting-table').empty();
+                break;
+            }
+            case 'voting': {
+                $('#ready-buttons').hide();
+                $('#question').show();
+                $('#voting-prompt').show();
+                $('#objective-wait').hide();
 
-            $('#ready-buttons').hide();
-            $('#question').show();
+                if($('#voting-table').attr('game') != data.game.id || $('#voting-table').attr('round') != data.game.round) {
+
+                    $('#voting-table').attr('game', data.game.id).attr('round', data.game.round);
+
+                    for (var answerid in data.voting) {
+                        $('#voting-table').append(`<tr><td><label><input class="votecheck" type="checkbox" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
+                    }
+
+                }
 
 
-            $('#question-view').text(data.question.question);
 
-        } else {
-            $('#question').hide();
+
+
+                break;
+            }
         }
 
         $('#lobby').show();
 
         data.players.forEach(function (x) {
-
-            if(x.ready == 'not ready') {
+            if(x.ready === 'not ready') {
                 if (x.userid === userid) {
                     $('#lobby-ready').show();
                     $('#lobby-unready').hide();
                 }
                 $("#lobby-players").append(`<tr><td style="color: red">${x.username}</td></tr>`);
-            } else if(!x.answer_ready) {
+            } else if(!x.answer_ready && data.game.started != null) {
                 $("#lobby-players").append(`<tr><td style="color: #fff81c">${x.username}</td></tr>`);
+
+                if (x.userid === userid) {
+                    $('#answer-box').show();
+                    $('#objective-active').show();
+                    $('#objective-wait').hide();
+                }
+
             } else {
                 $("#lobby-players").append(`<tr><td style="color: green">${x.username}</td></tr>`);
 
                 if (x.userid === userid) {
                     $('#lobby-ready').hide();
                     $('#lobby-unready').show();
+
+                    if(data.game.started != null) {
+                        $('#answer-box').hide();
+                        $('#objective-active').hide();
+                        $('#objective-wait').show();
+                    }
+
                 }
+
 
             }
         });
@@ -174,6 +234,23 @@
 
     }
 
+    function send_vote(votes) {
+
+        $.ajax({
+            type: 'POST',
+            url: '/quip/vote',
+            dataType: 'json',
+            data:  {key:key, game:currgameid, vote:votes},
+            success: function(data){
+                console.log(data);
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
+
+    }
 
     function submit_username(usrname) {
 
