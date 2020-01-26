@@ -81,7 +81,7 @@
 
     <h3 id="question-view"></h3>
 
-    <div id="answer-box">
+    <div id="answer-box" hidden>
         <input type="text" id="answer-inputtext">
         <button onclick="send_answer($('#answer-inputtext').val()); $('#answer-inputtext').val('')">Отправить</button>
     </div>
@@ -206,7 +206,11 @@
                     $('#answer-box').hide();
                 } else {
                     $('#objectives').show();
-                    $('#answer-box').hide();
+                    if(data.question != null) {
+                        $('#answer-box').show();
+                    } else {
+                        $('#answer-box').hide();
+                    }
                 }
 
                 $('#ready-buttons').hide();
@@ -229,6 +233,7 @@
                     $('#voting-button').show();
                 }
 
+                $('#answer-box').hide();
                 $('#voting-prompt').show();
                 $('#ready-buttons').hide();
                 $('#question').show();
@@ -306,7 +311,6 @@
                 $("#lobby-players").append(`<tr><td style="color: #fff81c">${x.username}</td></tr>`);
 
                 if (x.userid === userid) {
-                    $('#answer-box').show();
                     $('#objective-active').show();
                     $('#objective-wait').hide();
                 }
@@ -319,7 +323,6 @@
                     $('#lobby-unready').show();
 
                     if(data.game.started != null) {
-                        $('#answer-box').hide();
                         $('#objective-active').hide();
                         $('#objective-wait').show();
                     }
@@ -377,6 +380,10 @@
     }
 
     function submit_username(usrname) {
+
+        if(usrname === null || usrname === '') {
+            return;
+        }
 
         username = usrname;
 

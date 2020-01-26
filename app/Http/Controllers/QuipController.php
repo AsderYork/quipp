@@ -105,25 +105,53 @@ class QuipController extends Controller
     private function setup_quipp_round(&$game, $players) {
 
         $game->round++;
-        $round = $game->round;
-        $round++;
+
+        $players_count = count($players);
+        $subrounds_count = ($players_count * $players_count - $players_count) / 2;
+
+        if($game->subround < $subrounds_count) {
+            $game->subround++;
+            db::table('games')->where('id', $game->id)->update(['round' => $game->round, 'status' => 'answers', 'subround' => $game->subround]);
+        }
+
+
 
         $questions_ids = db::table('questions')->pluck('id')->toArray();
 
-        $question = $questions_ids[array_rand($questions_ids)];
 
-        $insert = [];
-        foreach ($players as $player) {
-            $insert[] = [
-                'user' => $player['userid'],
-                'game' => $game->id,
-                'round' => $round,
-                'question' => $question,
-            ];
+        $subrounds = [];
+        for($i = 0; $i < count($players); $i++) {
+            for($j = $i + 1; $j < count($players); $j++) {
+                $subrounds[] = [$players[$i]['userid'], $players[$j]['userid']];
+            }
         }
-        db::table('answers')->insert($insert);
 
-        db::table('games')->where('id', $game->id)->update(['round' => $round, 'status' => 'answers']);
+        $rand_array = array_rand($questions_ids, count($subrounds));
+        if(!is_array($rand_array)) {
+            $rand_array = [$rand_array];
+        }
+
+        $questions = array_map(function ($x) use($questions_ids) {return $questions_ids[$x];},
+            $rand_array
+        );
+
+
+        $inserts = [];
+        for($i = 0; $i < count($subrounds); $i++) {
+            foreach ([0,1] as $index) {
+                $inserts[] = [
+                    'user' => $subrounds[$i][$index],
+                    'game' => $game->id,
+                    'round' => $game->round,
+                    'subround' => $i,
+                    'question' => $questions[$i],
+                ];
+            }
+        }
+
+        db::table('answers')->insert($inserts);
+
+        db::table('games')->where('id', $game->id)->update(['round' => $game->round, 'status' => 'answers', 'subround' => 0]);
 
 
 
@@ -131,15 +159,30 @@ class QuipController extends Controller
 
     }
 
-    private function get_players_question($gameid, $round, $userid) {
+    private function get_players_question($game, $userid) {
 
-        return db::table('answers')
-            ->leftJoin('questions', 'questions.id', '=', 'answers.question')
-            ->where('user', $userid)
-            ->where('game', $gameid)
-            ->where('round', $round)
-            ->select(['questions.question', 'answers.answer'])
-            ->first();
+        if($game->status == 'answers') {
+            return db::table('answers')
+                ->leftJoin('questions', 'questions.id', '=', 'answers.question')
+                ->where('user', $userid)
+                ->where('game', $game->id)
+                ->where('round', $game->round)
+                ->where('answer', null)
+                ->orderBy('subround', 'asc')
+                ->select(['questions.question', 'answers.answer'])
+                ->first();
+        } else {
+            return db::table('answers')
+                ->leftJoin('questions', 'questions.id', '=', 'answers.question')
+                ->where('user', $userid)
+                ->where('game', $game->id)
+                ->where('round', $game->round)
+                ->where('subround', $game->subround)
+                ->select(['questions.question', 'answers.answer'])
+                ->first();
+        }
+
+
 
     }
 
@@ -151,13 +194,21 @@ class QuipController extends Controller
 
     }
 
-    private function set_player_answer($gameid, $round, $userid, $answer) {
+    private function set_player_answer($gameid, $round, $subround, $userid, $answer) {
 
-        db::table('answers')
+        $unanswered_players_questions = db::table('answers')
             ->where('user', $userid)
             ->where('game', $gameid)
             ->where('round', $round)
-            ->update(['answer' => $answer]);
+            ->where('answer', null)
+            ->orderBy('subround', 'asc')
+            ->pluck('id')->toArray();
+
+        if(count($unanswered_players_questions) > 0) {
+            db::table('answers')
+                ->where('id', $unanswered_players_questions[0])
+                ->update(['answer' => $answer]);
+        }
 
         $no_answers = db::table('answers')
             ->where('game', $gameid)
@@ -165,9 +216,10 @@ class QuipController extends Controller
             ->where('answer', null)
             ->count();
 
-        if($no_answers === 0) {
+        if ($no_answers === 0) {
             $this->start_voting($gameid);
         }
+
 
 
     }
@@ -245,6 +297,7 @@ class QuipController extends Controller
         return db::table('answers')
             ->where('game', $game->id)
             ->where('round', $game->round)
+            ->where('subround', $game->subround)
             ->pluck('answer', 'id')->toArray();
 
     }
@@ -320,6 +373,7 @@ class QuipController extends Controller
             ->where('game', $game->id)
             ->where('user', $userid)
             ->where('round', $game->round)
+            ->where('subround', $game->subround)
             ->where('type', $type)
             ->delete();
 
@@ -349,7 +403,8 @@ class QuipController extends Controller
             ->leftJoin('votes', function($join) use ($game) {
                 $join->on('votes.user', '=', 'games_users.user')
                     ->on('votes.game', '=', 'games_users.game')
-                    ->where('votes.round', $game->round);
+                    ->where('votes.round', $game->round)
+                    ->where('votes.subround', $game->subround);
                 })
             ->where('games_users.type', 'player')
             ->where('games_users.game', $game->id)
@@ -432,7 +487,8 @@ class QuipController extends Controller
             ->leftJoin('answers', function ($join) {
                 $join->on('answers.game', '=', 'games_users.game')
                     ->on('answers.user', '=', 'users.id')
-                    ->on('answers.round', '=', 'games.round');
+                    ->on('answers.round', '=', 'games.round')
+                    ->on('answers.subround', '=', 'games.subround');
             })
             ->where('games_users.game', $game)
             ->where('games_users.type', 'player')
@@ -481,8 +537,10 @@ class QuipController extends Controller
 
         $result = ['players' => $gamedata, 'game' => $game];
 
+
         if($game->started != null) {
-            $result['question'] = $this->get_players_question($gameid, $game->round, $authorization['user']->id);
+            $result['question'] = $this->get_players_question($game, $authorization['user']->id);
+
         }
 
         switch ($game->status) {
@@ -573,7 +631,7 @@ class QuipController extends Controller
             return json_encode(['err' => 'wrong gamestate']);
         }
 
-        $this->set_player_answer($gameid, $game->round, $userid, $request->input('answer'));
+        $this->set_player_answer($gameid, $game->round, $game->subround, $userid, $request->input('answer'));
 
     }
 

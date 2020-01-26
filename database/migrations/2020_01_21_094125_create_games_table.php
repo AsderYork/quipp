@@ -20,6 +20,7 @@ class CreateGamesTable extends Migration
             $table->dateTime('started')->nullable();
             $table->enum('status', ['started', 'answers', 'voting', 'showing_results', 'end'])->default('started');
             $table->integer('round')->default(0);
+            $table->integer('subround')->default(0);
             $table->softDeletes();
             $table->timestamps();
             $table->foreign('creator')->references('id')->on('users');

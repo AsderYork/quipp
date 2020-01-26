@@ -17,7 +17,8 @@ class CreateAnswers extends Migration
             $table->increments('id');
             $table->integer('user')->unsigned();
             $table->integer('game')->unsigned();
-            $table->integer('round');
+            $table->integer('round')->default(0);
+            $table->integer('subround')->default(0);
             $table->integer('question')->unsigned();
             $table->string('answer', 1024)->nullable();
             $table->timestamps();
