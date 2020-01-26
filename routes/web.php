@@ -16,7 +16,7 @@ $router->get('/', function () use ($router) {
 });
 
 
-$router->get('/quip/{name}', 'QuipController@index');
+$router->get('/quip[/{name}]', 'QuipController@index');
 
 
 $router->post('/quip/auth', 'QuipController@auth');

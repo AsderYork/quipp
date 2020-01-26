@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use function foo\func;
 
 class QuipController extends Controller
 {
@@ -18,7 +19,7 @@ class QuipController extends Controller
         //
     }
 
-    public function index($name) {
+    public function index($name = null) {
 
         $data = ['name' => $name];
 
@@ -121,7 +122,7 @@ class QuipController extends Controller
         }
         db::table('answers')->insert($insert);
 
-        db::table('games')->where('id', $game->id)->update(['round' => $round]);
+        db::table('games')->where('id', $game->id)->update(['round' => $round, 'status' => 'answers']);
 
 
 
@@ -247,55 +248,63 @@ class QuipController extends Controller
 
     private function get_results($game) {
 
-        $data = db::table('votes')
-            ->leftJoin('answers', 'answers.id', '=', 'votes.answer')
-            ->leftJoin('users AS answers_authors', 'answers_authors.id', '=', 'votes.answer')
-            ->where('votes.game', $game->id)
+        $data = db::table('answers')
+            ->leftJoin('votes', 'votes.answer', 'answers.id')
+            ->leftJoin('users AS answers_authors', 'answers_authors.id', '=', 'answers.user')
+            ->leftJoin('users AS votes_authors', 'votes_authors.id', '=', 'votes.user')
+            ->where('answers.game', $game->id)
             ->select([
-                'votes.user',
-                'votes.round',
-                'votes.answer',
-                'votes.answer',
+                'answers.id',
+                'answers.answer',
+                'answers.round',
+                'answers_authors.name AS player_name',
+                'answers_authors.id AS player_id',
                 'votes.type',
                 'votes.value',
-                'answers.user AS answer_author'
+                'votes_authors.id AS voter_id',
+                'votes_authors.name AS voter_name'
+
             ])
             ->get();
 
         $results = ['full' => [], 'current' => []];
-
         foreach ($data as $datum) {
             $type = $datum->type == null ? 'default' : $datum->type;
 
-            if(!array_key_exists($type, $results['full'])) {
-                $results['full'][$type] = [];
+            if(!array_key_exists($datum->player_id, $results['full'])) {
+                $results['full'][$datum->player_id] = ['name' => $datum->player_name, 'id' => $datum->player_id, 'results' =>[$type => ['sum' => 0]]];
             }
 
-            if(!array_key_exists($datum->answer_author, $results['full'][$type])) {
-                $results['full'][$type][$datum->answer_author] = 0;
+            if(!array_key_exists($type, $results['full'][$datum->player_id]['results'])) {
+                $results['full'][$datum->player_id]['results'][$type] = ['sum' => 0];
             }
-
-            $results['full'][$type][$datum->answer_author] += $datum->value;
+            $results['full'][$datum->player_id]['results'][$type]['sum'] += $datum->value;
 
             if($datum->round === $game->round) {
 
-                if(!array_key_exists($datum->answer, $results['current'])) {
-                    $results['current'][$datum->answer] = [];
+                if(!array_key_exists($datum->id, $results['current'])) {
+                    $results['current'][$datum->id] = ['id' => $datum->id, 'player_id' => $datum->player_id, 'player_name' => $datum->player_name, 'answer' => $datum->answer, 'results' => []];
                 }
 
-                if(!array_key_exists($datum->type, $results['current'][$datum->answer])) {
-                    $results['current'][$datum->answer][$type] = ['sum' => 0, 'voters' => []];
+                if(!array_key_exists($type, $results['current'][$datum->id]['results'])) {
+                    $results['current'][$datum->id]['results'][$type] = ['sum' => 0, 'voters' => []];
                 }
 
-                if(!array_key_exists($datum->user, $results['current'][$datum->answer][$type]['voters'])) {
-                    $results['current'][$datum->answer][$type]['voters'][$datum->user] = 0;
+                $results['current'][$datum->id]['results'][$type]['sum'] += $datum->value;
+                if($datum->voter_id != null) {
+                    $results['current'][$datum->id]['results'][$type]['voters'][] = ['id' => $datum->voter_id, 'name' => $datum->voter_name, 'value' => $datum->value];
                 }
-                $results['current'][$datum->answer][$type]['voters'][$datum->user] += $datum->value;
 
             }
 
+
         }
 
+        uasort($results['full'], function ($a, $b) use($type) {return $b['results'][$type]['sum'] - $a['results'][$type]['sum'];});
+        $results['full'] = array_values($results['full']);
+
+        uasort($results['current'], function ($a, $b) use($type) {return $b['results'][$type]['sum'] - $a['results'][$type]['sum'];});
+        $results['current'] = array_values($results['current']);
 
         return $results;
 
@@ -476,6 +485,15 @@ class QuipController extends Controller
                 break;
             case 'showing_results':
                 $result['results'] = $this->get_results($game);
+
+
+                $show_results_time = date_create('now')->diff(date_create($game->updated_at))->s;
+                $result['results_time'] = $show_results_time;
+
+                if($show_results_time > 10) {
+                    $this->setup_quipp_round($game, $gamedata);
+                }
+
 
                 break;
         }

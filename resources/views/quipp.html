@@ -64,11 +64,14 @@
 <div id="question" hidden>
     <h1>Игра началась!</h1>
 
-    <div id="objective-active" hidden>
-        <h2>Придумайте забавный ответ на вопрос</h2>
-    </div>
-    <div id="objective-wait" hidden>
-        <h2>Ожидание других игроков</h2>
+    <div id="objectives">
+
+        <div id="objective-active" hidden>
+            <h2>Придумайте забавный ответ на вопрос</h2>
+        </div>
+        <div id="objective-wait" hidden>
+            <h2>Ожидание других игроков</h2>
+        </div>
     </div>
 
     <h3 id="question-view"></h3>
@@ -83,6 +86,41 @@
         </table>
 
         <button onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
+
+    </div>
+
+    <div id="results">
+
+        <div id="current-results" hidden>
+            <h3>Результаты раунда</h3>
+            <table id="curr_results-table">
+                <tr>
+                    <th>
+                        Автор
+                    </th>
+                    <th>
+                        Ответ
+                    </th>
+                    <th>
+                        Голоса
+                    </th>
+                </tr>
+            </table>
+        </div>
+
+        <div id="full-results" hidden>
+            <h3>Текущий счет</h3>
+            <table id="full_results-table">
+                <tr>
+                    <th>
+                        Счет
+                    </th>
+                    <th>
+                        Игрок
+                    </th>
+                </tr>
+            </table>
+        </div>
 
     </div>
 
@@ -142,6 +180,10 @@
                 $('#question').hide();
                 $('#voting-prompt').hide();
                 $('#voting-table').empty();
+                $('#objectives').show();
+                $('#curr_results-table').hide();
+                $('#current-results').hide();
+                $('#full-results').hide();
                 break;
             }
             case 'answers': {
@@ -150,6 +192,10 @@
                 $('#voting-prompt').hide();
                 $('#question-view').text(data.question.question);
                 $('#voting-table').empty();
+                $('#objectives').show();
+                $('#curr_results-table').hide();
+                $('#current-results').hide();
+                $('#full-results').hide();
                 break;
             }
             case 'voting': {
@@ -157,18 +203,56 @@
                 $('#question').show();
                 $('#voting-prompt').show();
                 $('#objective-wait').hide();
+                $('#objectives').show();
+                $('#curr_results-table').hide();
+                $('#current-results').hide();
+                $('#full-results').hide();
 
                 if($('#voting-table').attr('game') != data.game.id || $('#voting-table').attr('round') != data.game.round) {
 
                     $('#voting-table').attr('game', data.game.id).attr('round', data.game.round);
 
                     for (var answerid in data.voting) {
-                        $('#voting-table').append(`<tr><td><label><input class="votecheck" type="checkbox" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
+                        $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
                     }
 
                 }
+                break;
+            }
+            case 'showing_results': {
+                $('#voting-prompt').hide();
+                $('#objectives').hide();
+                $('#curr_results-table').show();
+                $('#current-results').show();
+                $('#full-results').show();
+
+                $('.curr_results_user').remove();
+
+                data.results.current.forEach(x => {
+
+                    $('#curr_results-table').append(
+                        `<tr class="curr_results_user" user="${x.player_id}">` +
+                        `<td>(${x.results.default.sum})${x.player_name}</td>` +
+                        `<td>${x.answer}</td>` +
+                        '<td>' +
+                        x.results.default.voters.map(y => y.name).join(' ') +
+                        '</td>' +
+                        '</tr>')
+
+                });
 
 
+                $('.full_results_user').remove();
+
+                data.results.full.forEach(x => {
+
+                    $('#full_results-table').append(
+                        `<tr class="full_results_user" user="${x.id}">` +
+                        `<td>${x.results.default.sum}</td>` +
+                        `<td>${x.name}</td>` +
+                        '</tr>')
+
+                });
 
 
 
@@ -236,6 +320,9 @@
 
     function send_vote(votes) {
 
+        $('.votecheck').hide();
+        votes.forEach(x => $('.votecheck').filter('[value="' + x + '"]').closest('label').css('font-weight', 'bold').css('color', 'aqua'));
+
         $.ajax({
             type: 'POST',
             url: '/quip/vote',
@@ -299,7 +386,6 @@
         });
 
     }
-
 
     function join_game(gamename) {
 
