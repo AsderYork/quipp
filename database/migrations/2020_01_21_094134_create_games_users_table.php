@@ -18,6 +18,7 @@ class CreateGamesUsersTable extends Migration
             $table->integer('user')->unsigned();
             $table->integer('game')->unsigned();
             $table->enum('ready_status', ['ready', 'not ready'])->default('not ready');
+            $table->enum('type', ['player', 'spectator'])->default('player');
             $table->softDeletes();
             $table->timestamps();
 

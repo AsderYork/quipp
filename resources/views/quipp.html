@@ -36,6 +36,11 @@
                 <button onclick="join_game($('#roomname_input').val())">Подключиться</button><input type="text" id="roomname_input">
             </td>
         </tr>
+        <tr>
+            <td>
+                <button onclick="join_game($('#roomname_input').val(), 'spectator')">Как зритель</button>
+            </td>
+        </tr>
     </table>
 
 </div>
@@ -78,14 +83,14 @@
 
     <div id="answer-box">
         <input type="text" id="answer-inputtext">
-        <button onclick="send_answer($('#answer-inputtext').val())">Отправить</button>
+        <button onclick="send_answer($('#answer-inputtext').val()); $('#answer-inputtext').val('')">Отправить</button>
     </div>
 
     <div id="voting-prompt" hidden>
         <table id="voting-table">
         </table>
 
-        <button onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
+        <button id="voting-button" onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
 
     </div>
 
@@ -173,37 +178,61 @@
     function update_lobby_data(data) {
         $("#lobby-players").find("tr:gt(0)").remove();
 
-        //'started', 'answers', 'voting', 'showing_results', 'end'
+        const spectator = data.players.find(x => x.userid === userid) === undefined;
+
         switch (data.game.status) {
             case 'started': {
-                $('#ready-buttons').show();
+
+                if(spectator) {
+                    $('#ready-buttons').hide();
+                    $('#objectives').show();
+                } else {
+                    $('#ready-buttons').show();
+                    $('#objectives').show();
+                }
+
                 $('#question').hide();
                 $('#voting-prompt').hide();
                 $('#voting-table').empty();
-                $('#objectives').show();
                 $('#curr_results-table').hide();
                 $('#current-results').hide();
                 $('#full-results').hide();
                 break;
             }
             case 'answers': {
+
+                if(spectator) {
+                    $('#objectives').hide();
+                    $('#answer-box').hide();
+                } else {
+                    $('#objectives').show();
+                    $('#answer-box').hide();
+                }
+
                 $('#ready-buttons').hide();
                 $('#question').show();
                 $('#voting-prompt').hide();
-                $('#question-view').text(data.question.question);
+                $('#question-view').text(data.question != null ? data.question.question : null);
                 $('#voting-table').empty();
-                $('#objectives').show();
                 $('#curr_results-table').hide();
                 $('#current-results').hide();
                 $('#full-results').hide();
                 break;
             }
             case 'voting': {
+
+                if(spectator) {
+                    $('#objectives').hide();
+                    $('#voting-button').hide();
+                } else {
+                    $('#objectives').show();
+                    $('#voting-button').show();
+                }
+
+                $('#voting-prompt').show();
                 $('#ready-buttons').hide();
                 $('#question').show();
-                $('#voting-prompt').show();
                 $('#objective-wait').hide();
-                $('#objectives').show();
                 $('#curr_results-table').hide();
                 $('#current-results').hide();
                 $('#full-results').hide();
@@ -213,7 +242,11 @@
                     $('#voting-table').attr('game', data.game.id).attr('round', data.game.round);
 
                     for (var answerid in data.voting) {
-                        $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
+                        if(spectator) {
+                            $('#voting-table').append(`<tr><td>${data.voting[answerid]}</td></tr>`);
+                        } else {
+                            $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
+                        }
                     }
 
                 }
@@ -320,6 +353,10 @@
 
     function send_vote(votes) {
 
+        if(votes === null || votes.length === 0) {
+            return;
+        }
+
         $('.votecheck').hide();
         votes.forEach(x => $('.votecheck').filter('[value="' + x + '"]').closest('label').css('font-weight', 'bold').css('color', 'aqua'));
 
@@ -387,7 +424,7 @@
 
     }
 
-    function join_game(gamename) {
+    function join_game(gamename, type = 'player') {
 
         $('#wellcome-screen').hide();
         $('#waiting').show();
@@ -396,7 +433,7 @@
             type: 'POST',
             url: '/quip/join',
             dataType: 'json',
-            data: {key:key, game:gamename},
+            data: {key:key, game:gamename, type:type},
             success: function(data){
                 enter_lobby(data);
 
@@ -429,6 +466,11 @@
     }
 
     function send_answer(answer) {
+
+        if(answer === null || answer === '') {
+            return;
+        }
+
 
         $.ajax({
             type: 'POST',

@@ -83,7 +83,7 @@ class QuipController extends Controller
 
     }
 
-    private function add_new_player($gameid, $userid) {
+    private function add_new_player($gameid, $userid, $type = 'player') {
 
 
         $existing_player = DB::table('games_users')
@@ -96,7 +96,8 @@ class QuipController extends Controller
             $gameid = DB::table('games_users')->insert(
                 [
                     'game' => $gameid,
-                    'user' => $userid
+                    'user' => $userid,
+                    'type' => $type,
                 ]);
         }
     }
@@ -178,11 +179,13 @@ class QuipController extends Controller
         db::table('games_users')
             ->where('game', $gameid)
             ->where('user', $userid)
+            ->where('type', 'player')
             ->where('deleted_at', null)
             ->update(['ready_status' => $status ? 'ready' : 'not ready']);
 
         $not_readies = db::table('games_users')
             ->where('game',  (int)$gameid)
+            ->where('type', 'player')
             ->where('deleted_at', null)
             ->where('ready_status','=', 'not ready')
             ->count();
@@ -348,6 +351,7 @@ class QuipController extends Controller
                     ->on('votes.game', '=', 'games_users.game')
                     ->where('votes.round', $game->round);
                 })
+            ->where('games_users.type', 'player')
             ->where('games_users.game', $game->id)
             ->where('votes.id', null)
             ->count();
@@ -387,6 +391,7 @@ class QuipController extends Controller
     public function join(Request $request) {
 
         $key = $request->input('key');
+        $type = $request->input('type');
 
         $user = DB::table('users')
             ->where('key', $key)
@@ -412,7 +417,7 @@ class QuipController extends Controller
         }
 
 
-        $this->add_new_player($game->id, $user->id);
+        $this->add_new_player($game->id, $user->id, $type);
 
         return json_encode(['name' => $game->name, 'id' => $game->id]);
 
@@ -430,6 +435,7 @@ class QuipController extends Controller
                     ->on('answers.round', '=', 'games.round');
             })
             ->where('games_users.game', $game)
+            ->where('games_users.type', 'player')
             ->where('games_users.deleted_at', null)
             ->select([
                 'games_users.ready_status',
@@ -588,6 +594,11 @@ class QuipController extends Controller
 
         if($game->status != 'voting') {
             return json_encode(['err' => 'wrong gamestate']);
+        }
+
+        $vote = $request->input('vote');
+        if($vote === null) {
+            return json_encode(['err' => 'no vote has been sent']);
         }
 
         $this->add_votes($game, $userid, $request->input('vote'));
