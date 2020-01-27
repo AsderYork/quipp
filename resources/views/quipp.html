@@ -251,7 +251,7 @@
                     $('#voting-table').empty();
 
                     for (var answerid in data.voting) {
-                        if(spectator) {
+                        if(spectator || data.no_vote) {
                             $('#voting-table').append(`<tr><td>${data.voting[answerid]}</td></tr>`);
                         } else {
                             $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);

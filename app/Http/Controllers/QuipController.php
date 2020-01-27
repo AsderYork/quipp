@@ -297,13 +297,34 @@ class QuipController extends Controller
      * @param $game object A game object
      * @return array
      */
-    private function get_answers($game) {
+    private function get_answers($game, $userid = null) {
 
-        return db::table('answers')
-            ->where('game', $game->id)
-            ->where('round', $game->round)
-            ->where('subround', $game->subround)
-            ->pluck('answer', 'id')->toArray();
+        if(empty($userid)) {
+            return db::table('answers')
+                ->where('game', $game->id)
+                ->where('round', $game->round)
+                ->where('subround', $game->subround)
+                ->pluck('answer', 'id')->toArray();
+        } else {
+            $data = db::table('answers')
+                ->where('game', $game->id)
+                ->where('round', $game->round)
+                ->where('subround', $game->subround)
+                ->select(['id', 'answer', 'user'])
+                ->get();
+
+            $result = [];
+            $in_question = false;
+
+            foreach ($data as $datum) {
+                $result[$datum->id] = $datum->answer;
+                $in_question = $in_question || ($datum->user === $userid);
+            }
+
+            return ['voting' => $result, 'in_question' => $in_question];
+
+
+        }
 
     }
 
@@ -373,7 +394,7 @@ class QuipController extends Controller
     }
 
 
-    private function add_votes($game, $userid, $answers, $value = 1, $type = null) {
+    private function add_votes($game, $userid, $answers, $value = 1, $type = null, $self_voting = false) {
 
         db::table('votes')
             ->where('game', $game->id)
@@ -386,6 +407,15 @@ class QuipController extends Controller
 
         if(!is_array($answers)) {
             $answers = [$answers];
+        }
+
+        $drop_subround = null;
+        if(!$self_voting) {
+            $drop_subround = db::table('answers')
+                ->where('game', $game->id)
+                ->where('round', $game->id)
+                ->where('user', $userid)
+                ->first('subround');
         }
 
         $insert = [];
@@ -403,8 +433,11 @@ class QuipController extends Controller
 
 
 
-        db::table('votes')
-            ->insert($insert);
+        if($drop_subround !== $game->subround) {
+            db::table('votes')
+                ->insert($insert);
+        }
+
 
         $missing_votes = db::table('games_users')
             ->leftJoin('votes', function($join) use ($game) {
@@ -418,7 +451,11 @@ class QuipController extends Controller
             ->where('votes.id', null)
             ->count();
 
-        if($missing_votes === 0) {
+        if(!$self_voting) {
+            $missing_votes -= 2;
+        }
+
+        if($missing_votes <= 0) {
             db::table('games')
                 ->where('id', $game->id)
                 ->update(['status' => 'showing_results', 'updated_at' => db::raw('NOW()')]);
@@ -552,6 +589,11 @@ class QuipController extends Controller
 
         switch ($game->status) {
             case 'voting':
+                if(count($gamedata) > 2) {
+                    $voting_data = $this->get_answers($game, $authorization['user']->id);
+                    $result['voting'] = $voting_data['voting'];
+                    $result['no_vote'] = $voting_data['in_question'];
+                }
                 $result['voting'] = $this->get_answers($game);
                 break;
             case 'showing_results':
@@ -561,9 +603,9 @@ class QuipController extends Controller
                 $show_results_time = date_create('now')->diff(date_create($game->updated_at))->s;
                 $result['results_time'] = $show_results_time;
 
-                /*if($show_results_time > 10) {
+                if($show_results_time > 10) {
                     $this->setup_quipp_round($game, $gamedata);
-                }*/
+                }
 
 
                 break;
