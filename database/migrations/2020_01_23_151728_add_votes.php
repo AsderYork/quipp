@@ -18,6 +18,7 @@ class AddVotes extends Migration
             $table->integer('user')->unsigned();
             $table->integer('game')->unsigned();
             $table->integer('round');
+            $table->integer('subround')->default(0);
             $table->integer('answer')->unsigned();
             $table->integer('type')->unsigned()->nullable();
             $table->integer('value')->unsigned()->nullable();

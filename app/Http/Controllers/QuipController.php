@@ -104,16 +104,18 @@ class QuipController extends Controller
 
     private function setup_quipp_round(&$game, $players) {
 
-        $game->round++;
-
         $players_count = count($players);
-        $subrounds_count = ($players_count * $players_count - $players_count) / 2;
+        $subrounds_count = (($players_count * $players_count) - $players_count) / 2;
 
-        if($game->subround < $subrounds_count) {
-            $game->subround++;
-            db::table('games')->where('id', $game->id)->update(['round' => $game->round, 'status' => 'answers', 'subround' => $game->subround]);
+
+        $game->subround++;
+        if($game->subround < $subrounds_count && $game->status === 'showing_results') {
+            db::table('games')->where('id', $game->id)->update(['round' => $game->round, 'status' => 'voting', 'subround' => $game->subround]);
+            return;
         }
+        $game->subround = 0;
 
+        $game->round++;
 
 
         $questions_ids = db::table('questions')->pluck('id')->toArray();
@@ -155,6 +157,7 @@ class QuipController extends Controller
 
 
 
+        echo 'succ'; exit;
 
 
     }
@@ -172,16 +175,18 @@ class QuipController extends Controller
                 ->select(['questions.question', 'answers.answer'])
                 ->first();
         } else {
+
             return db::table('answers')
                 ->leftJoin('questions', 'questions.id', '=', 'answers.question')
-                ->where('user', $userid)
                 ->where('game', $game->id)
                 ->where('round', $game->round)
                 ->where('subround', $game->subround)
-                ->select(['questions.question', 'answers.answer'])
+                ->select(['questions.question'])
                 ->first();
-        }
 
+
+
+        }
 
 
     }
@@ -313,6 +318,7 @@ class QuipController extends Controller
                 'answers.id',
                 'answers.answer',
                 'answers.round',
+                'answers.subround',
                 'answers_authors.name AS player_name',
                 'answers_authors.id AS player_id',
                 'votes.type',
@@ -336,7 +342,7 @@ class QuipController extends Controller
             }
             $results['full'][$datum->player_id]['results'][$type]['sum'] += $datum->value;
 
-            if($datum->round === $game->round) {
+            if(($datum->round === $game->round) && ($datum->subround == $game->subround)) {
 
                 if(!array_key_exists($datum->id, $results['current'])) {
                     $results['current'][$datum->id] = ['id' => $datum->id, 'player_id' => $datum->player_id, 'player_name' => $datum->player_name, 'answer' => $datum->answer, 'results' => []];
@@ -388,6 +394,7 @@ class QuipController extends Controller
                 'game' => $game->id,
                 'user' => $userid,
                 'round' => $game->round,
+                'subround' => $game->subround,
                 'answer' => $answer,
                 'type' => $type,
                 'value' => $value
@@ -554,9 +561,9 @@ class QuipController extends Controller
                 $show_results_time = date_create('now')->diff(date_create($game->updated_at))->s;
                 $result['results_time'] = $show_results_time;
 
-                if($show_results_time > 10) {
+                /*if($show_results_time > 10) {
                     $this->setup_quipp_round($game, $gamedata);
-                }
+                }*/
 
 
                 break;

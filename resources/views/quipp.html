@@ -233,6 +233,7 @@
                     $('#voting-button').show();
                 }
 
+                $('#question-view').text(data.question != null ? data.question.question : null);
                 $('#answer-box').hide();
                 $('#voting-prompt').show();
                 $('#ready-buttons').hide();
@@ -242,9 +243,12 @@
                 $('#current-results').hide();
                 $('#full-results').hide();
 
-                if($('#voting-table').attr('game') != data.game.id || $('#voting-table').attr('round') != data.game.round) {
+                if($('#voting-table').attr('game') != data.game.id ||
+                    $('#voting-table').attr('round') != data.game.round ||
+                    $('#voting-table').attr('subround') != data.game.subround) {
 
-                    $('#voting-table').attr('game', data.game.id).attr('round', data.game.round);
+                    $('#voting-table').attr('game', data.game.id).attr('round', data.game.round).attr('subround', data.game.subround);
+                    $('#voting-table').empty();
 
                     for (var answerid in data.voting) {
                         if(spectator) {
