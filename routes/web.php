@@ -26,6 +26,7 @@ $router->post('/quip/lobby', 'QuipController@lobby_status');
 $router->post('/quip/ready', 'QuipController@ready');
 $router->post('/quip/answer', 'QuipController@answer');
 $router->post('/quip/vote', 'QuipController@vote');
+$router->post('/quip/leave', 'QuipController@leave');
 
 
 

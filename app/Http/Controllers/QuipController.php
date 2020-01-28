@@ -27,7 +27,6 @@ class QuipController extends Controller
 
     }
 
-
     public function auth(Request $request)
     {
         $name = $request->input('name');
@@ -50,7 +49,21 @@ class QuipController extends Controller
             $result['key'] = $user->key;
             $result['id'] = $user->id;
             $result['new'] = false;
+
+            $game = DB::table('games_users')
+                ->leftJoin('games', 'games.id', '=', 'games_users.game')
+                ->where('user', $user->id)
+                ->where('games.deleted_at', null)
+                ->orderBy('id', 'desc')
+                ->first(['games.id', 'games.name']);
+
+            if(!empty($game)) {
+                $result['game'] = $game;
+            }
+
+
         }
+
 
         echo json_encode($result);
 
@@ -119,7 +132,6 @@ class QuipController extends Controller
 
 
         $questions_ids = db::table('questions')->pluck('id')->toArray();
-
 
         $subrounds = [];
         for($i = 0; $i < count($players); $i++) {
@@ -523,7 +535,7 @@ class QuipController extends Controller
     }
 
 
-    public function get_game_players($game) {
+    public function get_game_players($game, $full_game_data = null) {
 
         $game_data = db::table('games_users')
             ->leftJoin('users', 'users.id', '=', 'games_users.user')
@@ -547,12 +559,29 @@ class QuipController extends Controller
 
         $result = [];
         foreach ($game_data as $game_datum) {
-            $result[] = [
-                'ready' => $game_datum->ready_status,
-                'userid' => $game_datum->user,
-                'username' => $game_datum->name,
-                'answer_ready' => $game_datum->answer != null,
-            ];
+
+            if(!empty($full_game_data) && $full_game_data->status === 'answers') {
+                $result[] = [
+                    'ready' => $game_datum->ready_status,
+                    'userid' => $game_datum->user,
+                    'username' => $game_datum->name,
+                    'answer_ready' => db::table('answers')
+                    ->where('user', $game_datum->user)
+                    ->where('game', $game)
+                    ->where('answer', null)
+                    ->count() == 0
+                ];
+            } else {
+                $result[] = [
+                    'ready' => $game_datum->ready_status,
+                    'userid' => $game_datum->user,
+                    'username' => $game_datum->name,
+                    'answer_ready' => $game_datum->answer != null,
+                ];
+
+
+
+            }
 
         }
 
@@ -573,10 +602,15 @@ class QuipController extends Controller
 
         $gameid = $request->input('game');
 
-        $gamedata = $this->get_game_players($gameid);
 
 
         $game = $this->get_game($gameid);
+        $gamedata = $this->get_game_players($gameid, $game);
+
+        if(empty($game->status) || $game->status == 'end') {
+            return json_encode(['endgame' => 'game_ended']);
+        }
+
 
 
         $result = ['players' => $gamedata, 'game' => $game];
@@ -603,7 +637,7 @@ class QuipController extends Controller
                 $show_results_time = date_create('now')->diff(date_create($game->updated_at))->s;
                 $result['results_time'] = $show_results_time;
 
-                if($show_results_time > 10) {
+                if($show_results_time > 15) {
                     $this->setup_quipp_round($game, $gamedata);
                 }
 
@@ -646,12 +680,12 @@ class QuipController extends Controller
 
         $started = $this->set_player_ready($gameid, $userid, $status);
 
-        $gamedata = $this->get_game_players($gameid);
-
         $game = db::table('games')
             ->where('id', $gameid)
             ->where('deleted_at', null)
             ->first();
+
+        $gamedata = $this->get_game_players($gameid, $game);
 
         if($started) {
             $this->setup_quipp_round($game, $gamedata);
@@ -709,6 +743,32 @@ class QuipController extends Controller
         }
 
         $this->add_votes($game, $userid, $request->input('vote'));
+
+        return json_encode(['ok' => 'ok']);
+
+    }
+
+    private function end_game($gameid) {
+
+        db::table('games')
+            ->where('id', $gameid)
+            ->update(['deleted_at' => db::raw('NOW()'), 'status' => 'end']);
+
+    }
+
+    public function leave(Request $request) {
+
+        $authorization = $this->authorise_user($request);
+
+        if(empty($authorization['user'])) {
+            return ['err' => 'unauthorized'];
+        } elseif($authorization['in_game'] == 0) {
+            return ['err' => 'not part of the game'];
+        }
+
+        $gameid = $request->input('game');
+
+        $this->end_game($gameid);
 
         return json_encode(['ok' => 'ok']);
 

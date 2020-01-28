@@ -51,6 +51,8 @@
 
 <div id="lobby" hidden>
 
+    <button onclick="leave_game();">exit</button>
+
     <h1 id="lobby-name"></h1>
 
     <div id="ready-buttons">
@@ -64,72 +66,74 @@
         </tr>
     </table>
 
+
+    <div id="question" hidden>
+        <h1>Игра началась!</h1>
+
+        <div id="objectives">
+
+            <div id="objective-active" hidden>
+                <h2>Придумайте забавный ответ на вопрос</h2>
+            </div>
+            <div id="objective-wait" hidden>
+                <h2>Ожидание других игроков</h2>
+            </div>
+        </div>
+
+        <h3 id="question-view"></h3>
+
+        <div id="answer-box" hidden>
+            <input type="text" id="answer-inputtext">
+            <button onclick="send_answer($('#answer-inputtext').val()); $('#answer-inputtext').val('')">Отправить</button>
+        </div>
+
+        <div id="voting-prompt" hidden>
+            <table id="voting-table">
+            </table>
+
+            <button id="voting-button" onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
+
+        </div>
+
+        <div id="results">
+
+            <div id="current-results" hidden>
+                <h3>Результаты раунда</h3>
+                <table id="curr_results-table">
+                    <tr>
+                        <th>
+                            Автор
+                        </th>
+                        <th>
+                            Ответ
+                        </th>
+                        <th>
+                            Голоса
+                        </th>
+                    </tr>
+                </table>
+            </div>
+
+            <div id="full-results" hidden>
+                <h3>Текущий счет</h3>
+                <table id="full_results-table">
+                    <tr>
+                        <th>
+                            Счет
+                        </th>
+                        <th>
+                            Игрок
+                        </th>
+                    </tr>
+                </table>
+            </div>
+
+        </div>
+
+    </div>
+
 </div>
 
-<div id="question" hidden>
-    <h1>Игра началась!</h1>
-
-    <div id="objectives">
-
-        <div id="objective-active" hidden>
-            <h2>Придумайте забавный ответ на вопрос</h2>
-        </div>
-        <div id="objective-wait" hidden>
-            <h2>Ожидание других игроков</h2>
-        </div>
-    </div>
-
-    <h3 id="question-view"></h3>
-
-    <div id="answer-box" hidden>
-        <input type="text" id="answer-inputtext">
-        <button onclick="send_answer($('#answer-inputtext').val()); $('#answer-inputtext').val('')">Отправить</button>
-    </div>
-
-    <div id="voting-prompt" hidden>
-        <table id="voting-table">
-        </table>
-
-        <button id="voting-button" onclick="send_vote($('.votecheck:checked').map(function(x) {return $(this).val();}).toArray());">Vote</button>
-
-    </div>
-
-    <div id="results">
-
-        <div id="current-results" hidden>
-            <h3>Результаты раунда</h3>
-            <table id="curr_results-table">
-                <tr>
-                    <th>
-                        Автор
-                    </th>
-                    <th>
-                        Ответ
-                    </th>
-                    <th>
-                        Голоса
-                    </th>
-                </tr>
-            </table>
-        </div>
-
-        <div id="full-results" hidden>
-            <h3>Текущий счет</h3>
-            <table id="full_results-table">
-                <tr>
-                    <th>
-                        Счет
-                    </th>
-                    <th>
-                        Игрок
-                    </th>
-                </tr>
-            </table>
-        </div>
-
-    </div>
-
-</div>
 
 
 
@@ -144,6 +148,7 @@
     var userid = null;
     var currgamename = null;
     var currgameid = null;
+    var interval = null;
 
     function auth_done(data) {
 
@@ -154,7 +159,15 @@
 
         $('#waiting').hide();
         $('#auth-menu').hide();
-        $('#wellcome-screen').show();
+
+
+        if(data.game != null) {
+            enter_lobby(data.game);
+        } else {
+            $('#wellcome-screen').show();
+        }
+
+
 
     }
 
@@ -171,11 +184,19 @@
         $('#lobby').show();
 
         start_lobby_update();
-        setInterval(start_lobby_update, 1000);
+        interval = setInterval(start_lobby_update, 1000);
 
     }
 
     function update_lobby_data(data) {
+
+        if(data.endgame != null) {
+            clearInterval(interval);
+            $('#lobby').hide();
+            $('#wellcome-screen').show();
+            return;
+        }
+
         $("#lobby-players").find("tr:gt(0)").remove();
 
         const spectator = data.players.find(x => x.userid === userid) === undefined;
@@ -264,6 +285,8 @@
             case 'showing_results': {
                 $('#voting-prompt').hide();
                 $('#objectives').hide();
+                $('#question').show();
+                $('#question-view').text(data.question != null ? data.question.question : null);
                 $('#curr_results-table').show();
                 $('#current-results').show();
                 $('#full-results').show();
@@ -437,6 +460,11 @@
 
     function join_game(gamename, type = 'player') {
 
+        if(!gamename || 0 === gamename.length) {
+            return;
+        }
+
+
         $('#wellcome-screen').hide();
         $('#waiting').show();
 
@@ -498,6 +526,24 @@
         });
 
 
+    }
+
+    function leave_game() {
+        $.ajax({
+            type: 'POST',
+            url: '/quip/leave',
+            dataType: 'json',
+            data:  {key:key, game:currgameid},
+            success: function(data){
+                clearInterval(interval);
+                $('#lobby').hide();
+                $('#wellcome-screen').show();
+            },
+            fail: function(data) {
+                console.log('error');
+                console.log(data);
+            }
+        });
     }
 
 
