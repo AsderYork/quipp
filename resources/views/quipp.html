@@ -272,10 +272,10 @@
                     $('#voting-table').empty();
 
                     for (var answerid in data.voting) {
-                        if(spectator || data.no_vote) {
-                            $('#voting-table').append(`<tr><td>${data.voting[answerid]}</td></tr>`);
+                        if(spectator || data.no_vote || data.voting[answerid].your_answer) {
+                            $('#voting-table').append(`<tr><td>${data.voting[answerid].answer}</td></tr>`);
                         } else {
-                            $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid]}</label></td></tr>`);
+                            $('#voting-table').append(`<tr><td><label><input class="votecheck" type="radio" name="voting" value="${answerid}">${data.voting[answerid].answer}</label></td></tr>`);
                         }
                     }
 
@@ -396,7 +396,9 @@
             dataType: 'json',
             data:  {key:key, game:currgameid, vote:votes},
             success: function(data){
-                console.log(data);
+                if(!data.ok) {
+                    $('.votecheck').show();
+                }
             },
             fail: function(data) {
                 console.log('error');
